@@ -7,6 +7,17 @@ from typing import List, Callable, Tuple, Any, Match
 
 
 def get_page_html(title: str) -> str:
+    search_response = requests.get(
+        "https://en.wikipedia.org/w/api.php",
+        params={"action": "query", "list": "search", "srsearch": title, "format": "json"},
+        headers={"User-Agent": "intro-ai-class/1.0"},
+        timeout=10
+    )
+    results = search_response.json().get("query", {}).get("search", [])
+    if results:
+        title = results[0]["title"]  # use the top search result title
+        print(f"Searching Wikipedia for: {title}")
+    
     for attempt in range(5):
         response = requests.get(
             "https://en.wikipedia.org/w/api.php",
@@ -123,6 +134,41 @@ def get_birth_date(name: str) -> str:
     return match.group("birth")
 
 
+def get_population(country_name: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(country_name)))
+    pattern = r"Population.*?(?:Increase|Decrease|Neutral decrease|Neutral increase)?\s*(?P<population>[\d,]{6,})"
+    error_text = "Page infobox has no population information"
+    match = get_match(infobox_text, pattern, error_text)
+
+    return match.group("population")
+
+
+def get_mass(planet_name: str) -> str:
+    """Gets the mass of the given planet
+
+    Args:
+        planet_name - name of the planet to get mass of
+
+    Returns:
+        mass of the given planet
+    """
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(planet_name)))
+    pattern = r"Mass(?:[^\d]*)(?P<mass>[\d.]+(?:\s*[×x]\s*10\^?[\d]+)?)"
+    error_text = "Page infobox has no mass information"
+    match = get_match(infobox_text, pattern, error_text)
+
+    return match.group("mass")
+
+
+def get_capital(country_name: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(country_name)))
+    pattern = r"Capital(?:\s*and\s*largest\s*city\s*)?(?P<capital>[A-Z][A-Za-z\s,\.]+?)(?:\d|Largest|Official|Government)"
+    error_text = "Page infobox has no capital information"
+    match = get_match(infobox_text, pattern, error_text)
+
+    return match.group("capital").strip()
+
+
 # below are a set of actions. Each takes a list argument and returns a list of answers
 # according to the action and the argument. It is important that each function returns a
 # list of the answer(s) and not just the answer itself.
@@ -152,6 +198,42 @@ def polar_radius(matches: List[str]) -> List[str]:
     return [get_polar_radius(matches[0])]
 
 
+def population(matches: List[str]) -> List[str]:
+    """Returns population of named country in matches
+
+    Args:
+        matches - match from pattern of country to find population of
+
+    Returns:
+        population of named country
+    """
+    return [get_population(" ".join(matches))]
+
+
+def mass(matches: List[str]) -> List[str]:
+    """Returns mass of named planet in matches
+
+    Args:
+        matches - match from pattern of planet to find mass of
+
+    Returns:
+        mass of named planet
+    """
+    return [get_mass(matches[0])]
+
+
+def capital(matches: List[str]) -> List[str]:
+    """Returns capital city of named country in matches
+
+    Args:
+        matches - match from pattern of country to find capital of
+
+    Returns:
+        capital city of named country
+    """
+    return [get_capital(" ".join(matches))]
+
+
 # dummy argument is ignored and doesn't matter
 def bye_action(dummy: List[str]) -> None:
     raise KeyboardInterrupt
@@ -167,6 +249,9 @@ Action = Callable[[List[str]], List[Any]]
 pa_list: List[Tuple[Pattern, Action]] = [
     ("when was % born".split(), birth_date),
     ("what is the polar radius of %".split(), polar_radius),
+    ("what is the population of %".split(), population),
+    ("what is the mass of %".split(), mass),
+    ("what is the capital of %".split(), capital),
     (["bye"], bye_action),
 ]
 
